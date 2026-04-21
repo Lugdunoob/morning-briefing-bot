@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Morning Briefing Bot — Telegram
-Génère un briefing quotidien via Claude API (avec web search)
-et l'envoie automatiquement sur Telegram.
+Génère un briefing quotidien via Claude API et l'envoie sur Telegram.
 """
 
 import os
@@ -11,238 +10,245 @@ import requests
 from datetime import datetime
 
 # ─────────────────────────────────────────────
-# CONFIGURATION — à remplir avec tes clés
+# CONFIGURATION
 # ─────────────────────────────────────────────
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "sk-ant-XXXX")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "XXXX:XXXX")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "6327266038")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "6327266038")
 
-# Sujets à inclure dans le briefing (active/désactive à ton goût)
 TOPICS = [
-    "Crypto & Bitcoin & Altcoins",
-    "Marchés financiers & indices boursiers",
-    "Tech & Intelligence Artificielle",
-    "Macro-économie & Fed & BCE",
-    "Podcasts recommandés pour traders",
+    "Crypto et Bitcoin et Altcoins",
+    "Marches financiers et indices boursiers",
+    "Tech et Intelligence Artificielle",
+    "Macro-economie et Fed et BCE",
+    "Podcasts recommandes pour traders",
 ]
 
 # ─────────────────────────────────────────────
-# GÉNÉRATION DU BRIEFING VIA CLAUDE
+# GÉNÉRATION VIA CLAUDE
 # ─────────────────────────────────────────────
 
-def generate_briefing() -> dict:
-    """Appelle l'API Claude avec web search pour générer le briefing du jour."""
-    today = datetime.now().strftime("%A %d %B %Y")
-    topics_str = ", ".join(TOPICS)
+def generate_briefing():
+    today    = datetime.now().strftime("%A %d %B %Y")
+    topics_s = ", ".join(TOPICS)
 
-    prompt = f"""Tu es un assistant de veille pour un trader crypto français.
-Aujourd'hui nous sommes le {today}.
+    prompt = (
+        "Tu es un assistant de veille pour un trader crypto francais.\n"
+        "Aujourd'hui nous sommes le " + today + ".\n\n"
+        "Genere un briefing matinal couvrant : " + topics_s + ".\n\n"
+        "IMPORTANT : reponds UNIQUEMENT avec du JSON brut valide.\n"
+        "Pas de markdown, pas de backticks, pas de texte avant ou apres.\n"
+        "Commence directement par { et termine par }.\n\n"
+        "Structure exacte a respecter :\n"
+        '{\n'
+        '  "headline": "phrase resumant le theme dominant du jour",\n'
+        '  "markets": [\n'
+        '    {"symbol": "BTC",    "price": "$84000", "change": 1.2,  "note": "info courte"},\n'
+        '    {"symbol": "ETH",    "price": "$1600",  "change": -0.8, "note": "info courte"},\n'
+        '    {"symbol": "SP500",  "price": "5200",   "change": 0.5,  "note": "info courte"},\n'
+        '    {"symbol": "EURUSD", "price": "1.0820", "change": -0.1, "note": "info courte"}\n'
+        '  ],\n'
+        '  "news": [\n'
+        '    {"title": "titre", "source": "CoinDesk",  "summary": "2 phrases.", "category": "crypto",     "url": null},\n'
+        '    {"title": "titre", "source": "Bloomberg", "summary": "2 phrases.", "category": "macro",      "url": null},\n'
+        '    {"title": "titre", "source": "The Block", "summary": "2 phrases.", "category": "regulation", "url": null},\n'
+        '    {"title": "titre", "source": "Reuters",   "summary": "2 phrases.", "category": "tech",       "url": null}\n'
+        '  ],\n'
+        '  "podcasts": [\n'
+        '    {"name": "nom", "episode": "description", "duration": "45 min", "why": "pertinent car..."},\n'
+        '    {"name": "nom", "episode": "description", "duration": "30 min", "why": "pertinent car..."}\n'
+        '  ],\n'
+        '  "article_du_jour": {\n'
+        '    "title": "titre article de fond",\n'
+        '    "source": "source",\n'
+        '    "summary": "3 phrases. Pourquoi le lire ?",\n'
+        '    "url": null\n'
+        '  },\n'
+        '  "phrase_du_jour": "citation ou insight percutant"\n'
+        '}'
+    )
 
-Utilise la recherche web pour trouver les vraies actualités du jour.
-Génère un briefing matinal couvrant : {topics_str}.
-
-Réponds UNIQUEMENT en JSON valide (sans markdown, sans backticks) avec cette structure :
-{{
-  "headline": "Titre accrocheur résumant le thème dominant du jour en une phrase",
-  "markets": [
-    {{ "symbol": "BTC", "price": "$XX,XXX", "change": 2.3, "note": "observation courte" }},
-    {{ "symbol": "ETH", "price": "$X,XXX", "change": -0.5, "note": "..." }},
-    {{ "symbol": "S&P500", "price": "X,XXX", "change": 0.8, "note": "..." }},
-    {{ "symbol": "EUR/USD", "price": "X.XXXX", "change": -0.1, "note": "..." }}
-  ],
-  "news": [
-    {{
-      "title": "Titre de l'article",
-      "source": "Nom de la source",
-      "summary": "Résumé 2-3 phrases. Pourquoi c'est important pour un trader ?",
-      "category": "crypto|tech|macro|regulation",
-      "url": "url ou null"
-    }}
-  ],
-  "podcasts": [
-    {{
-      "name": "Nom du podcast",
-      "episode": "Titre ou description de l'épisode récent",
-      "duration": "~45 min",
-      "why": "Pourquoi écouter ça aujourd'hui ?"
-    }}
-  ],
-  "article_du_jour": {{
-    "title": "Titre",
-    "source": "Source",
-    "summary": "Résumé 3-4 phrases de l'article de fond recommandé.",
-    "url": "url ou null"
-  }},
-  "phrase_du_jour": "Une citation ou insight de marché percutant pour commencer la journée."
-}}
-
-Inclure 4-5 news, 2 podcasts. Les prix marchés doivent être les plus proches possible du moment actuel."""
-
-    response = requests.post(
+    resp = requests.post(
         "https://api.anthropic.com/v1/messages",
         headers={
-            "x-api-key": ANTHROPIC_API_KEY,
+            "x-api-key":         ANTHROPIC_API_KEY,
             "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
+            "content-type":      "application/json",
         },
         json={
-            "model": "claude-sonnet-4-20250514",
-            "max_tokens": 2500,
-            "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-            "messages": [{"role": "user", "content": prompt}],
+            "model":      "claude-sonnet-4-6",
+            "max_tokens": 2000,
+            "messages":   [{"role": "user", "content": prompt}],
         },
         timeout=90,
     )
-    response.raise_for_status()
-    data = response.json()
 
-    # Extraire le texte JSON de la réponse
+    if resp.status_code != 200:
+        print("Erreur API Anthropic " + str(resp.status_code) + " : " + resp.text)
+        resp.raise_for_status()
+
+    data = resp.json()
     text = ""
     for block in data.get("content", []):
         if block.get("type") == "text":
             text += block["text"]
 
-    text = text.strip().replace("```json", "").replace("```", "").strip()
+    text  = text.strip().replace("```json", "").replace("```", "").strip()
     start = text.find("{")
-    end = text.rfind("}") + 1
+    end   = text.rfind("}") + 1
+
+    if start == -1 or end == 0:
+        raise ValueError("Aucun JSON dans la reponse : " + text[:300])
+
     return json.loads(text[start:end])
 
 
 # ─────────────────────────────────────────────
-# FORMATAGE DU MESSAGE TELEGRAM
+# FORMATAGE HTML TELEGRAM
 # ─────────────────────────────────────────────
 
 CATEGORY_EMOJI = {
-    "crypto": "🟡",
-    "tech": "🔵",
-    "macro": "🟢",
+    "crypto":     "🟡",
+    "tech":       "🔵",
+    "macro":      "🟢",
     "regulation": "🔴",
 }
 
-def format_telegram_message(briefing: dict) -> str:
-    """Convertit le JSON briefing en message Telegram formaté (MarkdownV2)."""
+def esc(val):
+    s = str(val) if val is not None else ""
+    s = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return s
+
+def format_message(b):
     today = datetime.now().strftime("%d/%m/%Y")
-    lines = []
+    L = []
 
-    # En-tête
-    lines.append(f"☀️ *MORNING BRIEFING — {today}*")
-    if briefing.get("headline"):
-        lines.append(f"_{escape_md(briefing['headline'])}_")
-    lines.append("")
+    L.append("☀️ <b>MORNING BRIEFING — " + today + "</b>")
+    if b.get("headline"):
+        L.append("<i>" + esc(b["headline"]) + "</i>")
+    L.append("")
 
-    # Marchés
-    if briefing.get("markets"):
-        lines.append("📊 *MARCHÉS*")
-        for m in briefing["markets"]:
-            change = m.get("change", 0)
-            arrow = "▲" if change >= 0 else "▼"
-            sign = "+" if change >= 0 else ""
-            note = f" — {m['note']}" if m.get("note") else ""
-            lines.append(
-                f"`{m['symbol']:<8}` {escape_md(m['price'])}  "
-                f"{arrow} {escape_md(f'{sign}{change}%')}{escape_md(note)}"
+    markets = b.get("markets", [])
+    if markets:
+        L.append("📊 <b>MARCHES</b>")
+        for m in markets:
+            change = float(m.get("change", 0))
+            arrow  = "▲" if change >= 0 else "▼"
+            sign   = "+" if change >= 0 else ""
+            note   = "  <i>" + esc(m["note"]) + "</i>" if m.get("note") else ""
+            L.append(
+                "<code>" + esc(m["symbol"]) + "</code>  "
+                + esc(m["price"]) + "   "
+                + arrow + " " + sign + str(change) + "%" + note
             )
-        lines.append("")
+        L.append("")
 
-    # News
-    if briefing.get("news"):
-        lines.append("📰 *ACTUALITÉS CLÉS*")
-        for n in briefing["news"]:
+    news = b.get("news", [])
+    if news:
+        L.append("📰 <b>ACTUALITES CLES</b>")
+        for n in news:
             emoji = CATEGORY_EMOJI.get(n.get("category", ""), "⚪")
-            lines.append(f"{emoji} *{escape_md(n['title'])}*")
-            lines.append(f"   {escape_md(n['source'])}")
-            lines.append(f"   {escape_md(n['summary'])}")
-            if n.get("url"):
-                lines.append(f"   [Lire l'article]({n['url']})")
-            lines.append("")
+            L.append(emoji + " <b>" + esc(n.get("title", "")) + "</b>")
+            L.append("   <i>" + esc(n.get("source", "")) + "</i>")
+            L.append("   " + esc(n.get("summary", "")))
+            url = n.get("url")
+            if url and url != "null":
+                L.append('   <a href="' + esc(url) + '">Lire</a>')
+            L.append("")
 
-    # Podcasts
-    if briefing.get("podcasts"):
-        lines.append("🎙 *PODCASTS DU JOUR*")
-        for p in briefing["podcasts"]:
-            dur = f" \\({escape_md(p['duration'])}\\)" if p.get("duration") else ""
-            lines.append(f"*{escape_md(p['name'])}*{dur}")
-            lines.append(f"   {escape_md(p['episode'])}")
+    podcasts = b.get("podcasts", [])
+    if podcasts:
+        L.append("🎙 <b>PODCASTS DU JOUR</b>")
+        for p in podcasts:
+            dur = " (" + esc(p["duration"]) + ")" if p.get("duration") else ""
+            L.append("<b>" + esc(p.get("name", "")) + "</b>" + dur)
+            L.append("   " + esc(p.get("episode", "")))
             if p.get("why"):
-                lines.append(f"   💡 {escape_md(p['why'])}")
-            lines.append("")
+                L.append("   💡 " + esc(p["why"]))
+            L.append("")
 
-    # Article du jour
-    if briefing.get("article_du_jour"):
-        a = briefing["article_du_jour"]
-        lines.append("📖 *ARTICLE DU JOUR*")
-        lines.append(f"*{escape_md(a['title'])}*")
-        lines.append(f"_{escape_md(a['source'])}_")
-        lines.append(escape_md(a["summary"]))
-        if a.get("url"):
-            lines.append(f"[Lire →]({a['url']})")
-        lines.append("")
+    a = b.get("article_du_jour")
+    if a:
+        L.append("📖 <b>ARTICLE DU JOUR</b>")
+        L.append("<b>" + esc(a.get("title", "")) + "</b>")
+        L.append("<i>" + esc(a.get("source", "")) + "</i>")
+        L.append(esc(a.get("summary", "")))
+        url = a.get("url")
+        if url and url != "null":
+            L.append('<a href="' + esc(url) + '">Lire</a>')
+        L.append("")
 
-    # Citation
-    if briefing.get("phrase_du_jour"):
-        lines.append(f"💬 _{escape_md(briefing['phrase_du_jour'])}_")
+    phrase = b.get("phrase_du_jour")
+    if phrase:
+        L.append("💬 <i>" + esc(phrase) + "</i>")
 
-    lines.append("")
-    lines.append("—")
-    lines.append("_Généré automatiquement par ton Morning Briefing Bot_")
-
-    return "\n".join(lines)
-
-
-def escape_md(text: str) -> str:
-    """Échappe les caractères spéciaux Telegram MarkdownV2."""
-    if not text:
-        return ""
-    text = str(text)
-    special = r"\_*[]()~`>#+-=|{}.!"
-    for ch in special:
-        text = text.replace(ch, f"\\{ch}")
-    return text
+    L.append("")
+    L.append("<i>Genere automatiquement par ton Morning Briefing Bot</i>")
+    return "\n".join(L)
 
 
 # ─────────────────────────────────────────────
-# ENVOI SUR TELEGRAM
+# ENVOI TELEGRAM
 # ─────────────────────────────────────────────
 
-def send_telegram(message: str) -> bool:
-    """Envoie le message sur Telegram."""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "MarkdownV2",
-        "disable_web_page_preview": False,
-    }
-    response = requests.post(url, json=payload, timeout=30)
-    response.raise_for_status()
-    result = response.json()
-    return result.get("ok", False)
+def send_telegram(message):
+    url  = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage"
+    resp = requests.post(
+        url,
+        json={
+            "chat_id":                  TELEGRAM_CHAT_ID,
+            "text":                     message,
+            "parse_mode":               "HTML",
+            "disable_web_page_preview": True,
+        },
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        print("Erreur Telegram " + str(resp.status_code) + " : " + resp.text)
+        resp.raise_for_status()
+    return resp.json().get("ok", False)
 
 
 # ─────────────────────────────────────────────
-# POINT D'ENTRÉE
+# MAIN
 # ─────────────────────────────────────────────
 
 def main():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Génération du briefing...")
+    ts = "[" + datetime.now().strftime("%H:%M:%S") + "] "
+    print(ts + "Demarrage Morning Briefing Bot")
+
+    if not ANTHROPIC_API_KEY:
+        print("ERREUR FATALE : ANTHROPIC_API_KEY manquante dans Railway Variables")
+        return
+    if not TELEGRAM_BOT_TOKEN:
+        print("ERREUR FATALE : TELEGRAM_BOT_TOKEN manquante dans Railway Variables")
+        return
+
+    print(ts + "Variables OK — Appel Claude en cours...")
+
     try:
         briefing = generate_briefing()
-        print("✓ Briefing généré")
+        print(ts + "Briefing genere OK")
 
-        message = format_telegram_message(briefing)
+        message = format_message(briefing)
+        print(ts + "Message formate — Envoi Telegram...")
+
         ok = send_telegram(message)
-
         if ok:
-            print("✓ Message envoyé sur Telegram avec succès")
+            print(ts + "SUCCES — Message envoye sur Telegram !")
         else:
-            print("✗ Erreur lors de l'envoi Telegram")
+            print(ts + "ECHEC — Telegram a retourne ok=false")
 
-    except requests.exceptions.RequestException as e:
-        print(f"✗ Erreur réseau : {e}")
+    except requests.exceptions.HTTPError as e:
+        print(ts + "Erreur HTTP : " + str(e))
+    except requests.exceptions.ConnectionError as e:
+        print(ts + "Erreur connexion : " + str(e))
+    except requests.exceptions.Timeout:
+        print(ts + "Timeout — pas de reponse en 90s")
     except json.JSONDecodeError as e:
-        print(f"✗ Erreur parsing JSON : {e}")
+        print(ts + "Erreur parsing JSON : " + str(e))
     except Exception as e:
-        print(f"✗ Erreur inattendue : {e}")
+        print(ts + "Erreur inattendue : " + str(e))
         raise
 
 

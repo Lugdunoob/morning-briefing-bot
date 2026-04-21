@@ -83,7 +83,6 @@ Inclure 4-5 news, 2 podcasts. Les prix marchés doivent être les plus proches p
         headers={
             "x-api-key": ANTHROPIC_API_KEY,
             "anthropic-version": "2023-06-01",
-            "anthropic-beta": "interleaved-thinking-2025-05-14",
             "content-type": "application/json",
         },
         json={

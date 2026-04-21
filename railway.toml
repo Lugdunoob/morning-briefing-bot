@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python morning_briefing_bot.py"
+restartPolicyType = "never"
